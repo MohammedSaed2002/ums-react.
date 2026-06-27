@@ -1,17 +1,61 @@
-import { useQuery } from '@tanstack/react-query'
+import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
 import axios from 'axios'
+import { useState } from 'react'
 
 const getUsers = async () => {
   const response = await axios.get('https://ums12.runasp.net/api/users')
   return response.data
 }
 
+const createUser = async (formData) => {
+  const response = await axios.post('https://ums12.runasp.net/api/users', formData, {
+    headers: { 'Content-Type': 'multipart/form-data' },
+  })
+  return response.data
+}
+
 export default function Users() {
+  const queryClient = useQueryClient()
+
+  const [form, setForm] = useState({ name: '', email: '', age: '', image: null })
+
   const { data, isError, isLoading, error } = useQuery({
     queryKey: ['users'],
     queryFn: getUsers,
-    staleTime: 1000 * 60 * 5, // 5Min
+    staleTime: 1000 * 60 * 5,
   })
+
+  const mutation = useMutation({
+    mutationFn: createUser,
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ['users'] })
+      setForm({ name: '', email: '', age: '', image: null })
+    },
+  })
+
+  const handleChange = (e) => {
+    const { name, value, files } = e.target
+    if (files) {
+      setForm((prev) => ({ ...prev, image: files[0] }))
+    } else {
+      setForm((prev) => ({ ...prev, [name]: value }))
+    }
+  }
+
+  const handleSubmit = () => {
+    if (!form.name || !form.email || !form.age) return
+    const formData = new FormData()
+    formData.append('name', form.name)
+    formData.append('email', form.email)
+    formData.append('age', form.age)
+    if (form.image) formData.append('image', form.image)
+    mutation.mutate(formData)
+  }
+
+  const handleReset = () => {
+    setForm({ name: '', email: '', age: '', image: null })
+    mutation.reset()
+  }
 
   return (
     <div className="bg-gray-50 min-h-screen p-8 font-sans text-gray-900">
@@ -23,30 +67,67 @@ export default function Users() {
         <div className="grid grid-cols-2 gap-4">
           <div className="flex flex-col gap-1.5">
             <label className="text-xs font-medium text-gray-500">Name</label>
-            <input type="text" placeholder="Alaa Test"
-              className="px-3 py-2 text-sm border border-gray-200 rounded-lg outline-none focus:border-blue-400 focus:ring-2 focus:ring-blue-100 transition" />
+            <input
+              type="text"
+              name="name"
+              value={form.name}
+              onChange={handleChange}
+              placeholder="Alaa Test"
+              className="px-3 py-2 text-sm border border-gray-200 rounded-lg outline-none focus:border-blue-400 focus:ring-2 focus:ring-blue-100 transition"
+            />
           </div>
           <div className="flex flex-col gap-1.5">
             <label className="text-xs font-medium text-gray-500">Email</label>
-            <input type="email" placeholder="alaa@example.com"
-              className="px-3 py-2 text-sm border border-gray-200 rounded-lg outline-none focus:border-blue-400 focus:ring-2 focus:ring-blue-100 transition" />
+            <input
+              type="email"
+              name="email"
+              value={form.email}
+              onChange={handleChange}
+              placeholder="alaa@example.com"
+              className="px-3 py-2 text-sm border border-gray-200 rounded-lg outline-none focus:border-blue-400 focus:ring-2 focus:ring-blue-100 transition"
+            />
           </div>
           <div className="flex flex-col gap-1.5">
             <label className="text-xs font-medium text-gray-500">Age</label>
-            <input type="number" placeholder="30"
-              className="px-3 py-2 text-sm border border-gray-200 rounded-lg outline-none focus:border-blue-400 focus:ring-2 focus:ring-blue-100 transition" />
+            <input
+              type="number"
+              name="age"
+              value={form.age}
+              onChange={handleChange}
+              placeholder="30"
+              className="px-3 py-2 text-sm border border-gray-200 rounded-lg outline-none focus:border-blue-400 focus:ring-2 focus:ring-blue-100 transition"
+            />
           </div>
           <div className="flex flex-col gap-1.5">
             <label className="text-xs font-medium text-gray-500">Profile image</label>
             <label className="flex items-center gap-2 px-3 py-2 text-sm border border-dashed border-gray-300 rounded-lg text-gray-400 cursor-pointer hover:border-blue-400 hover:text-blue-500 transition">
-              <span>Choose file</span>
-              <input type="file" className="hidden" accept="image/*" />
+              <span>{form.image ? form.image.name : 'Choose file'}</span>
+              <input type="file" name="image" className="hidden" accept="image/*" onChange={handleChange} />
             </label>
           </div>
         </div>
+
+        {mutation.isSuccess && (
+          <p className="mt-3 text-sm text-green-600">✓ User added successfully!</p>
+        )}
+        {mutation.isError && (
+          <p className="mt-3 text-sm text-red-500">✗ Error: {mutation.error?.message}</p>
+        )}
+
         <div className="flex justify-end gap-2 mt-5">
-          <button className="px-4 py-2 text-sm border border-gray-200 rounded-lg text-gray-600 hover:bg-gray-50 transition cursor-pointer">Reset</button>
-          <button className="px-4 py-2 text-sm bg-blue-500 text-white rounded-lg hover:bg-blue-600 transition cursor-pointer">Add user</button>
+          <button
+            onClick={handleReset}
+            className="px-4 py-2 text-sm border border-gray-200 rounded-lg text-gray-600 hover:bg-gray-50 transition cursor-pointer"
+          >
+            Reset
+          </button>
+          <button
+            onClick={handleSubmit}
+            disabled={mutation.isPending}
+            className="px-4 py-2 text-sm bg-blue-500 text-white rounded-lg hover:bg-blue-600 transition cursor-pointer disabled:opacity-50"
+          >
+            {mutation.isPending ? 'Adding...' : 'Add user'}
+          </button>
         </div>
       </div>
 
@@ -64,17 +145,14 @@ export default function Users() {
           <button className="px-3 py-1.5 text-xs bg-blue-500 text-white rounded-lg hover:bg-blue-600 transition cursor-pointer">+ Add</button>
         </div>
 
-        {/* Loading */}
         {isLoading && (
           <div className="text-center py-10 text-gray-400">Loading...</div>
         )}
 
-        {/* Error */}
         {isError && (
           <div className="text-center py-10 text-red-500">Error: {error.message}</div>
         )}
 
-        {/* Table */}
         {data && (
           <div className="overflow-x-auto">
             <table className="w-full text-sm border-collapse">
