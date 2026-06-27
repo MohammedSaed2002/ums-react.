@@ -2,15 +2,29 @@ import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
 import axios from 'axios'
 import { useState } from 'react'
 
+const API_URL = 'https://ums12.runasp.net/api/users'
+
 const getUsers = async () => {
-  const response = await axios.get('https://ums12.runasp.net/api/users')
+  const response = await axios.get(API_URL)
   return response.data
 }
 
 const createUser = async (formData) => {
-  const response = await axios.post('https://ums12.runasp.net/api/users', formData, {
+  const response = await axios.post(API_URL, formData, {
     headers: { 'Content-Type': 'multipart/form-data' },
   })
+  return response.data
+}
+
+const updateUser = async ({ id, formData }) => {
+  const response = await axios.put(`${API_URL}/${id}`, formData, {
+    headers: { 'Content-Type': 'multipart/form-data' },
+  })
+  return response.data
+}
+
+const deleteUser = async (id) => {
+  const response = await axios.delete(`${API_URL}/${id}`)
   return response.data
 }
 
@@ -18,6 +32,7 @@ export default function Users() {
   const queryClient = useQueryClient()
 
   const [form, setForm] = useState({ name: '', email: '', age: '', image: null })
+  const [editingUser, setEditingUser] = useState(null)
 
   const { data, isError, isLoading, error } = useQuery({
     queryKey: ['users'],
@@ -25,11 +40,27 @@ export default function Users() {
     staleTime: 1000 * 60 * 5,
   })
 
-  const mutation = useMutation({
+  const createMutation = useMutation({
     mutationFn: createUser,
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ['users'] })
       setForm({ name: '', email: '', age: '', image: null })
+    },
+  })
+
+  const updateMutation = useMutation({
+    mutationFn: updateUser,
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ['users'] })
+      setEditingUser(null)
+      setForm({ name: '', email: '', age: '', image: null })
+    },
+  })
+
+  const deleteMutation = useMutation({
+    mutationFn: deleteUser,
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ['users'] })
     },
   })
 
@@ -49,21 +80,47 @@ export default function Users() {
     formData.append('email', form.email)
     formData.append('age', form.age)
     if (form.image) formData.append('image', form.image)
-    mutation.mutate(formData)
+
+    if (editingUser) {
+      updateMutation.mutate({ id: editingUser.id, formData })
+    } else {
+      createMutation.mutate(formData)
+    }
+  }
+
+  const handleEdit = (user) => {
+    setEditingUser(user)
+    setForm({ name: user.name, email: user.email, age: user.age, image: null })
+    window.scrollTo({ top: 0, behavior: 'smooth' })
+  }
+
+  const handleDelete = (id) => {
+    if (window.confirm('Are you sure you want to delete this user?')) {
+      deleteMutation.mutate(id)
+    }
   }
 
   const handleReset = () => {
     setForm({ name: '', email: '', age: '', image: null })
-    mutation.reset()
+    setEditingUser(null)
+    createMutation.reset()
+    updateMutation.reset()
   }
+
+  const isSuccess = editingUser ? updateMutation.isSuccess : createMutation.isSuccess
+  const isError2 = editingUser ? updateMutation.isError : createMutation.isError
+  const mutError = editingUser ? updateMutation.error : createMutation.error
+  const isPending = editingUser ? updateMutation.isPending : createMutation.isPending
 
   return (
     <div className="bg-gray-50 min-h-screen p-8 font-sans text-gray-900">
       <h1 className="text-xl font-medium mb-6">User Management</h1>
 
-      {/* Add User Form */}
+      {/* Add / Edit User Form */}
       <div className="bg-white border border-gray-200 rounded-xl p-6 mb-6">
-        <p className="text-xs font-medium text-gray-400 uppercase tracking-widest mb-4">Add new user</p>
+        <p className="text-xs font-medium text-gray-400 uppercase tracking-widest mb-4">
+          {editingUser ? 'Edit user' : 'Add new user'}
+        </p>
         <div className="grid grid-cols-2 gap-4">
           <div className="flex flex-col gap-1.5">
             <label className="text-xs font-medium text-gray-500">Name</label>
@@ -107,11 +164,13 @@ export default function Users() {
           </div>
         </div>
 
-        {mutation.isSuccess && (
-          <p className="mt-3 text-sm text-green-600">✓ User added successfully!</p>
+        {isSuccess && (
+          <p className="mt-3 text-sm text-green-600">
+            ✓ User {editingUser ? 'updated' : 'added'} successfully!
+          </p>
         )}
-        {mutation.isError && (
-          <p className="mt-3 text-sm text-red-500">✗ Error: {mutation.error?.message}</p>
+        {isError2 && (
+          <p className="mt-3 text-sm text-red-500">✗ Error: {mutError?.message}</p>
         )}
 
         <div className="flex justify-end gap-2 mt-5">
@@ -123,10 +182,10 @@ export default function Users() {
           </button>
           <button
             onClick={handleSubmit}
-            disabled={mutation.isPending}
+            disabled={isPending}
             className="px-4 py-2 text-sm bg-blue-500 text-white rounded-lg hover:bg-blue-600 transition cursor-pointer disabled:opacity-50"
           >
-            {mutation.isPending ? 'Adding...' : 'Add user'}
+            {isPending ? 'Saving...' : editingUser ? 'Update user' : 'Add user'}
           </button>
         </div>
       </div>
@@ -142,7 +201,6 @@ export default function Users() {
               </span>
             )}
           </div>
-          <button className="px-3 py-1.5 text-xs bg-blue-500 text-white rounded-lg hover:bg-blue-600 transition cursor-pointer">+ Add</button>
         </div>
 
         {isLoading && (
@@ -176,9 +234,19 @@ export default function Users() {
                     <td className="px-3 py-3 text-gray-400 border-b border-gray-100">{user.image ?? '—'}</td>
                     <td className="px-3 py-3 border-b border-gray-100">
                       <div className="flex gap-1.5">
-                        <button className="px-2 py-1 text-xs border border-gray-200 rounded-md text-gray-500 hover:bg-gray-50 transition cursor-pointer">View</button>
-                        <button className="px-2 py-1 text-xs border border-gray-200 rounded-md text-gray-500 hover:bg-gray-50 transition cursor-pointer">Edit</button>
-                        <button className="px-2 py-1 text-xs border border-red-100 rounded-md text-red-500 hover:bg-red-50 transition cursor-pointer">Delete</button>
+                        <button
+                          onClick={() => handleEdit(user)}
+                          className="px-2 py-1 text-xs border border-gray-200 rounded-md text-gray-500 hover:bg-gray-50 transition cursor-pointer"
+                        >
+                          Edit
+                        </button>
+                        <button
+                          onClick={() => handleDelete(user.id)}
+                          disabled={deleteMutation.isPending}
+                          className="px-2 py-1 text-xs border border-red-100 rounded-md text-red-500 hover:bg-red-50 transition cursor-pointer disabled:opacity-50"
+                        >
+                          Delete
+                        </button>
                       </div>
                     </td>
                   </tr>
