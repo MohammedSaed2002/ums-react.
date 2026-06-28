@@ -17,8 +17,10 @@ const createUser = async (formData) => {
 }
 
 const updateUser = async ({ id, formData }) => {
-  const response = await axios.put(`${API_URL}/${id}`, formData, {
-    headers: { 'Content-Type': 'multipart/form-data' },
+  const response = await axios.patch(`${API_URL}/${id}`, {
+    name: formData.get('name'),
+    email: formData.get('email'),
+    age: Number(formData.get('age')),
   })
   return response.data
 }
@@ -32,7 +34,7 @@ export default function Users() {
   const queryClient = useQueryClient()
 
   const [form, setForm] = useState({ name: '', email: '', age: '', image: null })
-  const [editingUser, setEditingUser] = useState(null)
+  const [editingId, setEditingId] = useState(null)
 
   const { data, isError, isLoading, error } = useQuery({
     queryKey: ['users'],
@@ -52,7 +54,7 @@ export default function Users() {
     mutationFn: updateUser,
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ['users'] })
-      setEditingUser(null)
+      setEditingId(null)
       setForm({ name: '', email: '', age: '', image: null })
     },
   })
@@ -81,15 +83,15 @@ export default function Users() {
     formData.append('age', form.age)
     if (form.image) formData.append('image', form.image)
 
-    if (editingUser) {
-      updateMutation.mutate({ id: editingUser.id, formData })
+    if (editingId !== null) {
+      updateMutation.mutate({ id: editingId, formData })
     } else {
       createMutation.mutate(formData)
     }
   }
 
   const handleEdit = (user) => {
-    setEditingUser(user)
+    setEditingId(user.id)
     setForm({ name: user.name, email: user.email, age: user.age, image: null })
     window.scrollTo({ top: 0, behavior: 'smooth' })
   }
@@ -102,15 +104,15 @@ export default function Users() {
 
   const handleReset = () => {
     setForm({ name: '', email: '', age: '', image: null })
-    setEditingUser(null)
+    setEditingId(null)
     createMutation.reset()
     updateMutation.reset()
   }
 
-  const isSuccess = editingUser ? updateMutation.isSuccess : createMutation.isSuccess
-  const isError2 = editingUser ? updateMutation.isError : createMutation.isError
-  const mutError = editingUser ? updateMutation.error : createMutation.error
-  const isPending = editingUser ? updateMutation.isPending : createMutation.isPending
+  const isSuccess = editingId ? updateMutation.isSuccess : createMutation.isSuccess
+  const isError2 = editingId ? updateMutation.isError : createMutation.isError
+  const mutError = editingId ? updateMutation.error : createMutation.error
+  const isPending = editingId ? updateMutation.isPending : createMutation.isPending
 
   return (
     <div className="bg-gray-50 min-h-screen p-8 font-sans text-gray-900">
@@ -119,7 +121,7 @@ export default function Users() {
       {/* Add / Edit User Form */}
       <div className="bg-white border border-gray-200 rounded-xl p-6 mb-6">
         <p className="text-xs font-medium text-gray-400 uppercase tracking-widest mb-4">
-          {editingUser ? 'Edit user' : 'Add new user'}
+          {editingId ? `Edit user #${editingId}` : 'Add new user'}
         </p>
         <div className="grid grid-cols-2 gap-4">
           <div className="flex flex-col gap-1.5">
@@ -166,7 +168,7 @@ export default function Users() {
 
         {isSuccess && (
           <p className="mt-3 text-sm text-green-600">
-            ✓ User {editingUser ? 'updated' : 'added'} successfully!
+            ✓ User {editingId ? 'updated' : 'added'} successfully!
           </p>
         )}
         {isError2 && (
@@ -185,7 +187,7 @@ export default function Users() {
             disabled={isPending}
             className="px-4 py-2 text-sm bg-blue-500 text-white rounded-lg hover:bg-blue-600 transition cursor-pointer disabled:opacity-50"
           >
-            {isPending ? 'Saving...' : editingUser ? 'Update user' : 'Add user'}
+            {isPending ? 'Saving...' : editingId ? 'Update user' : 'Add user'}
           </button>
         </div>
       </div>
@@ -226,7 +228,7 @@ export default function Users() {
               </thead>
               <tbody>
                 {(data.users ?? data).map((user, index) => (
-                  <tr key={user.id ?? index} className="hover:bg-gray-50 transition">
+                  <tr key={user.id} className="hover:bg-gray-50 transition">
                     <td className="px-3 py-3 text-gray-400 border-b border-gray-100">{index + 1}</td>
                     <td className="px-3 py-3 font-medium border-b border-gray-100">{user.name}</td>
                     <td className="px-3 py-3 text-blue-500 border-b border-gray-100">{user.email}</td>
